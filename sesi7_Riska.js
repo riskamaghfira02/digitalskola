@@ -59,36 +59,42 @@ describe("Test Login and Get User", function () {
     console.log("Data Response", data);
   });
 //----------------------------------------------------Negative Test [Method : POST]------------------------------------------------
-    it("Invalid Login", async function () {
+//Pengujian : Menginput/mengisi Age dengan text, bukan numeric
+//Expected result : harusnya memberikan pesan error bahwa Age harus diisi dengan Numeric
+
+     it("Invalid Age", async function () {
       this.timeout(15000);
     const response = await fetch(
-      "https://belajar-bareng.onrender.com/api/login",
+      "https://belajar-bareng.onrender.com/api/add-user",
       {
         headers: {
           "Content-Type": "application/json",
+          authorization: `Bearer ${token}`,
         },
         method: "POST",
         body: JSON.stringify({
-          username: "Riska",
-          password: "admin1",
+          username: "riska1",
+          age: "30",
         }),
       }
     );
 
-    //  assert.strictEqual(response.status, 401);
-    expect(response.status).to.equal(401);
-    console.log("Assert 1: 401 Unauthorized");
+  
+
+    assert.strictEqual(response.status, 400);
+    expect(response.status).to.equal(400);
+    console.log("Assert 1: 400 Bad Request");
 
     // Mencetak Response Body
     const data = await response.json();
     // console.log(data);
+
     //memastikan pesan response sesuai dengan yang diharapkan
-    expect(data.message).to.eql("Invalid username or password!");
+    expect(data.message).to.eql("Assert 2: Age must be NUMERIC");
     console.log(data);
 
     // Simpan Token
     token = data.token;
     //console.log(token);
   });
-
 });
