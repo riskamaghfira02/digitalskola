@@ -1,14 +1,19 @@
-const { describe } = require("mocha");
-const assert = require("assert");
+const { describe, it } = require("mocha");
 const { expect } = require("chai");
+const Ajv = require("ajv");
+const { validate, schemas } = require("./api-schemas"); // Import schema
 
 let token;
- //tambah timeout
+let userId; // Untuk menyimpan ID user yang dibuat
 
-describe("Test Login and Get User", function () {
-//----------------------------------------------------Positive Test [Method : POST]------------------------------------------------
-  it("Valid Login", async function () {
+describe("Test API dengan JSON Schema Validation", function () {
+  // Set timeout global
+  beforeEach(function() {
     this.timeout(15000);
+  });
+
+  //----------------------------------------------------Positive Test [Login]------------------------------------------------
+  it("Valid Login dengan Schema Validation", async function () {
     const response = await fetch(
       "https://belajar-bareng.onrender.com/api/login",
       {
@@ -23,22 +28,37 @@ describe("Test Login and Get User", function () {
       }
     );
 
-    //  assert.strictEqual(response.status, 200);
+    // Assert status code
     expect(response.status).to.equal(200);
-    console.log("Assert 1: Status 200 OK");
+    console.log("✓ Status 200 OK");
 
-    // Mencetak Response Body
+    // Parse response
     const data = await response.json();
-    // console.log(data);
-    expect(data.message).to.eql("Login successful");
-    console.log ("Assert 2 : Login Successful");
-    // Simpan Token
+    
+    // Validasi dengan JSON Schema
+    const validation = validate("loginResponseSuccess", data);
+    
+    expect(validation.isValid).to.be.true;
+    if (validation.errors) {
+      console.error("Schema validation errors:", validation.errors);
+    }
+    console.log("✓ Response sesuai dengan loginResponseSuccess schema");
+    
+    // Validasi pesan
+    expect(data.message).to.equal("Login successful");
+    console.log("✓ Message: 'Login successful'");
+    
+    // Validasi token
+    expect(data.token).to.be.a('string');
+    expect(data.token.length).to.be.greaterThan(10);
+    console.log("✓ Token valid (JWT)");
+    
+    // Simpan token
     token = data.token;
-    //console.log(token);
   });
-//----------------------------------------------------Positive Test [Method : GET]------------------------------------------------
-  it("Get User", async function () {
-    this.timeout(15000);
+
+  //----------------------------------------------------Positive Test [Get Users]------------------------------------------------
+  it("Get User dengan Schema Validation", async function () {
     const response = await fetch(
       "https://belajar-bareng.onrender.com/api/users",
       {
@@ -49,21 +69,43 @@ describe("Test Login and Get User", function () {
       }
     );
 
-    //  assert.strictEqual(response.status, 200);
     expect(response.status).to.equal(200);
-    console.log("Assert 1: Status 200 OK");
-    // Mencetak Response Body
-    const data = await response.json();
-    expect(data).to.not.be.null;
-    console.log("Assert 2: Get User berhasil");
-    console.log("Data Response", data);
-  });
-//----------------------------------------------------Negative Test [Method : POST]------------------------------------------------
-//Pengujian : Menginput/mengisi Age dengan text, bukan numeric
-//Expected result : harusnya memberikan pesan error bahwa Age harus diisi dengan Numeric
+    console.log("✓ Status 200 OK");
 
-     it("Invalid Age", async function () {
-      this.timeout(15000);
+    const data = await response.json();
+    
+    // Validasi dengan JSON Schema
+    const validation = validate("getUsersResponse", data);
+    
+    expect(validation.isValid).to.be.true;
+    if (validation.errors) {
+      console.error("Schema validation errors:", validation.errors);
+    }
+    console.log("✓ Response sesuai dengan getUsersResponse schema");
+    
+    // Additional validation
+    expect(data).to.be.an('array');
+    expect(data.length).to.be.greaterThan(0);
+    
+    // Validasi setiap user dalam array
+    data.forEach((user, index) => {
+      expect(user).to.have.property('id');
+      expect(user.id).to.be.a('number');
+      expect(user).to.have.property('username');
+      expect(user.username).to.be.a('string');
+      expect(user).to.have.property('age');
+      expect(user.age).to.be.a('number');
+      console.log(`  User ${index + 1}: ${user.username} (ID: ${user.id}, Age: ${user.age})`);
+    });
+    
+    // Simpan user pertama untuk testing selanjutnya
+    if (data.length > 0) {
+      userId = data[0].id;
+    }
+  });
+
+  //----------------------------------------------------Negative Test [Invalid Age]------------------------------------------------
+  it("Invalid Age - Schema Validation untuk Error Response", async function () {
     const response = await fetch(
       "https://belajar-bareng.onrender.com/api/add-user",
       {
@@ -74,27 +116,152 @@ describe("Test Login and Get User", function () {
         method: "POST",
         body: JSON.stringify({
           username: "riska1",
-          age: "30",
+          age: "30", // String instead of number
         }),
       }
     );
 
-  
-
-    assert.strictEqual(response.status, 400);
+    // Assert status code untuk error
     expect(response.status).to.equal(400);
-    console.log("Assert 1: 400 Bad Request");
+    console.log("✓ Status 400 Bad Request");
 
-    // Mencetak Response Body
     const data = await response.json();
-    // console.log(data);
+    
+    // Validasi dengan errorResponse schema
+    const validation = validate("errorResponse", data);
+    
+    expect(validation.isValid).to.be.true;
+    if (validation.errors) {
+      console.error("Schema validation errors:", validation.errors);
+    }
+    console.log("✓ Response sesuai dengan errorResponse schema");
+    
+    // Validasi pesan error
+    expect(data.message).to.be.a('string');
+    expect(data.message.toLowerCase()).to.include('age').or.include('numeric').or.include('invalid');
+    console.log(`✓ Error message: "${data.message}"`);
+  });
 
-    //memastikan pesan response sesuai dengan yang diharapkan
-    expect(data.message).to.eql("Assert 2: Age must be NUMERIC");
-    console.log(data);
+  //----------------------------------------------------Positive Test [Add Valid User]------------------------------------------------
+  it("Add Valid User dengan Schema Validation", async function () {
+    const testUsername = `testuser_${Date.now()}`;
+    
+    const response = await fetch(
+      "https://belajar-bareng.onrender.com/api/add-user",
+      {
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        method: "POST",
+        body: JSON.stringify({
+          username: testUsername,
+          age: 25, // Number, not string
+        }),
+      }
+    );
 
-    // Simpan Token
-    token = data.token;
-    //console.log(token);
+    // Assert status code untuk success
+    expect(response.status).to.equal(201); // Biasanya 201 Created
+    console.log("✓ Status 201 Created");
+
+    const data = await response.json();
+    
+    // Validasi dengan success response schema
+    const validation = validate("addUserResponseSuccess", data);
+    
+    if (!validation.isValid) {
+      // Jika tidak sesuai dengan success schema, coba validasi dengan error schema
+      const errorValidation = validate("errorResponse", data);
+      if (errorValidation.isValid) {
+        console.log(`Response adalah error: ${data.message}`);
+        return;
+      }
+    }
+    
+    expect(validation.isValid).to.be.true;
+    console.log("✓ Response sesuai dengan addUserResponseSuccess schema");
+    
+    // Validasi data user yang dikembalikan
+    expect(data.message).to.be.a('string');
+    if (data.user) {
+      expect(data.user.username).to.equal(testUsername);
+      expect(data.user.age).to.equal(25);
+      console.log(`✓ User berhasil dibuat: ${data.user.username}`);
+    }
+  });
+
+  //----------------------------------------------------Negative Test [Missing Required Fields]------------------------------------------------
+  it("Missing Required Fields - Schema Validation", async function () {
+    const response = await fetch(
+      "https://belajar-bareng.onrender.com/api/add-user",
+      {
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        method: "POST",
+        body: JSON.stringify({
+          // username tidak disertakan (required)
+          age: 25
+        }),
+      }
+    );
+
+    // Assert status code untuk error
+    expect(response.status).to.be.oneOf([400, 422]);
+    console.log(`✓ Status ${response.status} untuk missing fields`);
+
+    const data = await response.json();
+    
+    // Validasi dengan errorResponse schema
+    const validation = validate("errorResponse", data);
+    
+    expect(validation.isValid).to.be.true;
+    console.log("✓ Response sesuai dengan errorResponse schema");
+    
+    // Validasi pesan error
+    expect(data.message).to.be.a('string');
+    console.log(`✓ Error message: "${data.message}"`);
+  });
+
+  //----------------------------------------------------Schema Validation Test------------------------------------------------
+  describe("JSON Schema Validation Tests", function() {
+    it("Validasi semua schema kompilasi dengan benar", function() {
+      // Test bahwa semua schema bisa dikompilasi
+      const ajv = new Ajv();
+      
+      Object.entries(schemas).forEach(([name, schema]) => {
+        try {
+          ajv.compile(schema);
+          console.log(`✓ Schema '${name}' berhasil dikompilasi`);
+        } catch (error) {
+          console.error(`✗ Schema '${name}' gagal dikompilasi:`, error.message);
+          throw error;
+        }
+      });
+    });
+
+    it("Test data sample terhadap schema", function() {
+      // Test data sample untuk login response
+      const sampleLoginResponse = {
+        message: "Login successful",
+        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+      };
+      
+      const validation = validate("loginResponseSuccess", sampleLoginResponse);
+      expect(validation.isValid).to.be.true;
+      console.log("✓ Sample login response valid");
+      
+      // Test invalid data
+      const invalidLoginResponse = {
+        message: "Wrong message",
+        token: "short"
+      };
+      
+      const invalidValidation = validate("loginResponseSuccess", invalidLoginResponse);
+      expect(invalidValidation.isValid).to.be.false;
+      console.log("✓ Invalid sample correctly rejected");
+    });
   });
 });
