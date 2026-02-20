@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
+    "testlogin": "mocha ../Automation/tests/specs/login.js --recursive --timeout 60000",
+    "testloginscreenshot": "mocha ../Automation/tests/specs/login-ss-test.js --recursive --timeout 60000",
+    "testloginvisual": "mocha ../Automation/tests/specs/visual-test.js --recursive --timeout 60000",
     "test-coba": "mocha ../Automation/tests/test-automation.js --recursive --timeout 60000",
         "test-report": "mocha ../Automation/tests/test-automation.js  --recursive --timeout 60000 --reporter mochawesome",
         "test-report-dua": "mocha ../Automation/tests/test-automation.js --recursive --timeout 60000 --reporter mocha-simple-html-reporter --reporter-options output=report.html"
